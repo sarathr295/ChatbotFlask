@@ -3,7 +3,7 @@ import requests
 import openai
 import wikipedia
 import webbrowser
-import pyautogui
+#import pyautogui
 
 application = Flask(__name__)
 
