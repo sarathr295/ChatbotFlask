@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with MindfulPal</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #97f2e7;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        #chat-container {
+            background-color: #d2ebf5;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(147, 23, 23, 0.1);
+            padding: 20px;
+            width: 75%; /* 3/4 of the full screen */
+            max-width: 90%;
+            text-align: center;
+            height: 800px;
+        }
+
+        #chat-history {
+            width: 100%;
+            height: 550px;
+            margin-bottom: 10px;
+            resize: none;
+        }
+
+        textarea, button {
+            margin-top: 10px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h1>MindfulPal</h1>
+        <button class="category-button" onclick="switchCategory(1)">Chat GPT</button>
+        <button class="category-button" onclick="switchCategory(2)">Google</button>
+        <button class="category-button" onclick="switchCategory(3)">Wikipedia</button>
+        <button class="category-button" onclick="switchCategory(4)">Weather</button>
+    
+        <textarea id="chat-history" rows="5" readonly></textarea><br>
+        
+        <textarea id="user-input" rows="3"></textarea><br>
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="startListening()">Start Listening</button>
+    </div>
+
+    <script>
+        let currentCategory = 1;
+        let gptSessionActive = false;
+        const chatHistory = document.getElementById('chat-history');
+        const userInputElement = document.getElementById('user-input');
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+
+        recognition.onresult = function(event) {
+            const speechToText = event.results[0][0].transcript.trim().toLowerCase();
+            if (!gptSessionActive && speechToText.includes("chat gpt")) {
+                gptSessionActive=true;
+                switchCategory(1);
+                userInputElement.value = speechToText;
+                sendMessage(); 
+            } else if(gptSessionActive && speechToText.toLowerCase() !== "stop chat gpt") {
+                userInputElement.value = speechToText;
+                sendMessage();
+            } else if(speechToText.toLowerCase() == "stop chat gpt") {
+                gptSessionActive= false;
+                chatHistory.value += 'Bot: ' + "chatGPT Stopped" + '\n';
+
+            } else if (speechToText.includes("google")) {
+                switchCategory(2);
+                startListeningForSearchQuery()
+            } else if (speechToText.includes("wikipedia")) {
+                switchCategory(3);
+                startListeningForQuery(); 
+            } else if (speechToText.includes("weather")) {
+                switchCategory(4);
+                startListeningForCity();
+            } else if (speechToText.includes("close tab")) {
+                closeRecentTab();
+            } else return ""
+        }
+
+        recognition.onend = function() {
+            recognition.start();
+        }
+
+        recognition.start();
+        
+        function sendMessage() {
+            const userInput = userInputElement.value;
+            chatHistory.value += 'You: ' + userInput + '\n';
+            userInputElement.value = '';
+
+            fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_input: userInput, category: currentCategory })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Bot response:', data.bot_response);
+                chatHistory.value += 'Bot: ' + data.bot_response + '\n';
+                speak(data.bot_response);
+                // Pause recognition when bot response starts being spoken
+                recognitionPaused = true;
+                speechSynthesis.onstart = function() {
+                    recognition.abort();
+                };
+                // Resume recognition when bot response finishes being spoken
+                speechSynthesis.onend = function() {
+                    recognitionPaused = false;
+                    recognition.start();
+                };
+            })
+            .catch(error => {
+                console.error('Error sending request to server:', error);
+            });
+        }
+
+      
+        // Function to start speech recognition for city name
+        function startListeningForCity() {
+            chatHistory.value += "Please say the name of the city for which you want to know the weather.\n";
+            function handleRecognitionResult(event) {
+                const city = event.results[0][0].transcript.trim();
+                 sendMessage2(city);
+                 // Remove the event listener after the result is handled
+                 recognition.removeEventListener('result', handleRecognitionResult);
+            }
+            recognition.addEventListener('result', handleRecognitionResult);
+            recognition.start();
+        }
+
+        function sendMessage2(city) {
+            chatHistory.value += 'You: ' + city + '\n';
+            fetch('/get_weather', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ transcription: "weather", city: city })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const weatherInfo = data.weather_info;
+                chatHistory.value += 'Bot: ' + weatherInfo + '\n';
+                speak(weatherInfo);
+            })
+            .catch(error => {
+                console.error('Error getting weather info:', error);
+            });
+        }
+        
+        function startListeningForQuery() {
+            chatHistory.value += "Please say what you would like to search for on Wikipedia.\n";
+            function handleRecognitionResult(event) {
+                const query = event.results[0][0].transcript.trim();
+                sendMessageWiki(query);
+                // Remove the event listener after the result is handled
+                recognition.removeEventListener('result', handleRecognitionResult);
+            }
+            recognition.addEventListener('result', handleRecognitionResult);
+            recognition.start();
+        }
+
+        function sendMessageWiki(query) {
+            chatHistory.value += 'You: ' + query + '\n';
+            fetch('/search_wikipedia', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const result = data.result;
+                chatHistory.value += 'Bot: ' + result + '\n';
+                speak(result);
+            })
+            .catch(error => {
+                console.error('Error searching Wikipedia:', error);
+            });
+        }    
+
+        // Function to start speech recognition for search query
+        function startListeningForSearchQuery() {
+            chatHistory.value += "What would you like to search for?\n";
+        
+            
+            function handleRecognitionResult(event) {
+                const query = event.results[0][0].transcript.trim();
+                sendQueryToServer(query);
+                // Remove the event listener after the result is handled
+                recognition.removeEventListener('result', handleRecognitionResult);
+            }
+        
+            recognition.addEventListener('result', handleRecognitionResult);
+        }
+        function sendQueryToServer(query) {
+            fetch('/perform_google_search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({query: query})
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message); // Show a message from the server
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        function closeRecentTab() {
+            fetch('/close_recent_tab', {
+                method: 'POST',
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message); // Show a message from the server
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+
+
+        function switchCategory(category) {
+            currentCategory = category;
+            chatHistory.value += `Switched to ${getCategoryName(category)}\n`;
+        }
+    
+        function getCategoryName(category) {
+            switch (category) {
+                case 1:
+                    return "GPT";
+                case 2:
+                    return "Google";
+                case 3:
+                    return "Wikipedia";
+                case 4:
+                    return "Weather";
+                default:
+                    return "";
+            }
+        }
+    
+        function speak(text) {
+            // Pause recognition when bot response starts being spoken
+            recognitionPaused = true;
+                speechSynthesis.onstart = function() {
+                    recognition.abort();
+                };
+            const synth = window.speechSynthesis;
+            const utterance = new SpeechSynthesisUtterance(text);
+            synth.speak(utterance);
+        }
+
+        // Resume recognition when bot response finishes being spoken
+        speechSynthesis.onend = function() {
+                    recognitionPaused = false;
+                    recognition.start();
+                };
+
+        //function startListening() {
+            //recognition.start();
+        //}
+    </script>
+</body>
+</html>
