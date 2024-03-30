@@ -3,7 +3,7 @@ import requests
 import openai
 import wikipedia
 import webbrowser
-#import pyautogui
+import pyautogui
 
 application = Flask(__name__)
 
@@ -100,7 +100,7 @@ def perform_google_search():
 @application.route('/close_recent_tab', methods=['POST'])
 def close_recent_tab():
     # Simulate Ctrl+W key press to close the current tab
-    # pyautogui.hotkey('ctrl', 'w')
+    pyautogui.hotkey('ctrl', 'w')
     return jsonify({'message': 'Closed the most recent tab'})
 
 if __name__ == '__main__':
