@@ -8,7 +8,7 @@ import pyautogui
 application = Flask(__name__)
 
 # Set your OpenAI API key
-openai.api_key = "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"
+openai.api_key = "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"
 model_id = 'gpt-3.5-turbo'
 
 @application.route('/')
