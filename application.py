@@ -4,11 +4,16 @@ import openai
 import wikipedia
 import webbrowser
 import pyautogui
+from dotenv import load_dotenv
+import os
 
 application = Flask(__name__)
 
+def configure():
+    load_dotenv()
+
 # Set your OpenAI API key
-openai.api_key = "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"
+openai.api_key = os.getenv("key")
 model_id = 'gpt-3.5-turbo'
 
 @application.route('/')
@@ -104,5 +109,6 @@ def close_recent_tab():
     return jsonify({'message': 'Closed the most recent tab'})
 
 if __name__ == '__main__':
+    configure()
     application.run(debug=True)
 
